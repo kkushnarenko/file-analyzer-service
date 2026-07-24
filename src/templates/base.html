@@ -1,0 +1,34 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>
+        {% block title %}
+            Сервис анализа данных
+        {% endblock %}
+    </title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', path='css/style.css') }}">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"> </script>
+</head>
+<body>
+    <header class="navbar">
+        <div class="navbar-container">
+            <div class="brand">
+                <div class="brand-icon">
+                    <span>File analyzer</span>>
+                </div>
+            </div>
+                <nav class="nav-links">
+                    <a href="/download" class="nav-link">Скачивание</a>
+                    <a href="/files" class="nav-link">Файлы и расчеты</a>
+                </nav>
+            </div>
+        </header>
+<main>
+    {% block content %}
+    {% endblock %}
+</main>
+</body>
+</html>

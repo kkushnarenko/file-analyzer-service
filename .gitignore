@@ -1,0 +1,42 @@
+# === PyCharm / JetBrains IDE ===
+.idea/
+*.iws
+*.iml
+*.ipr
+.idea_modules/
+
+# === Python & Virtual Environments ===
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# === Byte-compiled / Python Cache ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# === Databases (Local & SQLite) ===
+*.db
+*.sqlite3
+*.sqlite
+src.db
+
+# === Environment Variables / Secrets ===
+.env
+.env.local
+.env.*.local
+
+# === Testing & Coverage ===
+.pytest_cache/
+.coverage
+htmlcov/
+.nox/
+.tox/
+
+# === OS generated files ===
+.DS_Store
+Thumbs.db
