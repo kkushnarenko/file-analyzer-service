@@ -1,12 +1,154 @@
-﻿<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>File Analyzer</title>
-</head>
-<body>
-    <header>
+﻿{% extends "base.html" %}
 
-    </header>>
-</body>
-</html>
+{% block title %}Скачанные файлы{% endblock %}
+
+{% block content %}
+<div x-data="filesApp()">
+
+    <div class="files-top-bar">
+        <div>
+            <h1 class="page-title" style="text-align: left; margin: 0;">Скачанные файлы</h1>
+            <p class="page-subtitle">Выберите файлы для подсчета частоты цифр (0–9).</p>
+        </div>
+
+        <button
+            @click="calculateStats()"
+            :disabled="selectedIds.length === 0 && !selectAllGlobal"
+            class="btn btn-primary">
+            <span>🧮 Рассчитать цифры</span>
+        </button>
+    </div>
+
+    <!-- Селекторы выбора -->
+    <div class="selection-bar">
+        <div class="checkbox-group">
+            <label class="checkbox-label">
+                <input type="checkbox" @change="toggleSelectAllPage($event)" :checked="isAllPageSelected">
+                <span>Выбрать на текущей странице</span>
+            </label>
+
+            <label class="checkbox-label" style="color: var(--primary);">
+                <input type="checkbox" x-model="selectAllGlobal" @change="if(selectAllGlobal) selectedIds = []">
+                <span>Выбрать ВСЕ файлы в базе</span>
+            </label>
+        </div>
+    </div>
+
+    <!-- Таблица -->
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 70px; text-align: center;">Выбор</th>
+                    <th>Имя файла</th>
+                    <th>Дата скачивания (UTC)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="file in files" :key="file.id">
+                    <tr>
+                        <td style="text-align: center;">
+                            <input type="checkbox" :value="file.id" x-model="selectedIds" :disabled="selectAllGlobal">
+                        </td>
+                        <td style="font-family: monospace; font-weight: 600;" x-text="file.name"></td>
+                        <td style="color: var(--text-muted);" x-text="formatDate(file.downloaded_at)"></td>
+                    </tr>
+                </template>
+                <tr x-show="files.length === 0">
+                    <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                        Файлы пока не скачаны.
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Пагинация -->
+        <div class="pagination">
+            <span>Страница <b x-text="currentPage">1</b> из <b x-text="totalPages">1</b></span>
+            <div style="display: flex; gap: 0.5rem;">
+                <button @click="prevPage()" :disabled="currentPage === 1" class="pagination-btn">Назад</button>
+                <button @click="nextPage()" :disabled="currentPage === totalPages" class="pagination-btn">Вперед</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Результаты расчёта -->
+    <div x-show="statsResult" class="card results-card">
+        <div class="results-header">
+            <h3 style="margin: 0;">📊 Результаты анализа</h3>
+            <button @click="statsResult = null" style="background: none; border: none; cursor: pointer; font-size: 1.2rem;">✕</button>
+        </div>
+
+        <p style="font-weight: 600; font-size: 0.9rem; margin-top: 0;">Общая сумма по всем выбранным файлам:</p>
+        <div class="stats-grid">
+            <template x-for="digit in ['0','1','2','3','4','5','6','7','8','9']" :key="digit">
+                <div class="stat-box">
+                    <div class="stat-box-title" x-text="`Цифра ${digit}`"></div>
+                    <div class="stat-box-value" x-text="statsResult?.total_stats[digit] || 0"></div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+</div>
+
+<script>
+function filesApp() {
+    return {
+        files: [],
+        selectedIds: [],
+        selectAllGlobal: false,
+        currentPage: 1,
+        totalPages: 1,
+        statsResult: null,
+
+        get isAllPageSelected() {
+            if (this.files.length === 0) return false;
+            return this.files.every(f => this.selectedIds.includes(f.id));
+        },
+
+        toggleSelectAllPage(e) {
+            if (e.target.checked) {
+                const pageIds = this.files.map(f => f.id);
+                this.selectedIds = Array.from(new Set([...this.selectedIds, ...pageIds]));
+            } else {
+                const pageIds = this.files.map(f => f.id);
+                this.selectedIds = this.selectedIds.filter(id => !pageIds.includes(id));
+            }
+        },
+
+        async fetchFiles() {
+            try {
+                const res = await fetch(`/api/v1/files?page=${this.currentPage}&page_size=10`);
+                if (res.ok) {
+                    const data = await res.json();
+                    this.files = data.items;
+                    this.totalPages = data.total_pages;
+                }
+            } catch (e) { console.error(e); }
+        },
+
+        async calculateStats() {
+            try {
+                const payload = { select_all: this.selectAllGlobal, file_ids: this.selectedIds };
+                const res = await fetch('/api/v1/files/calculate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) this.statsResult = await res.json();
+            } catch (e) { console.error(e); }
+        },
+
+        formatDate(isoStr) {
+            return isoStr ? new Date(isoStr).toLocaleString('ru-RU') : '';
+        },
+
+        prevPage() { if (this.currentPage > 1) { this.currentPage--; this.fetchFiles(); } },
+        nextPage() { if (this.currentPage < this.totalPages) { this.currentPage++; this.fetchFiles(); } },
+
+        init() { this.fetchFiles(); }
+    }
+}
+</script>
+{% endblock %}

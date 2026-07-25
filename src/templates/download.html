@@ -1,10 +1,113 @@
-﻿<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Title</title>
-</head>
-<body>
+﻿{% extends "base.html" %}
 
-</body>
-</html>
+{% block title %}Скачивание каталога{% endblock %}
+
+{% block content %}
+<div x-data="downloadApp()">
+
+    <!-- Заголовок -->
+    <div class="page-header">
+        <h1 class="page-title">Скачивание каталога файлов</h1>
+        <p class="page-subtitle">Автоматический запуск выкачки с учетом ограничений API.</p>
+    </div>
+
+    <!-- Карточка управления -->
+    <div class="card download-card">
+
+        <div class="download-action">
+            <button
+                @click="startDownload()"
+                :disabled="status.is_active"
+                class="btn btn-primary">
+                <span x-show="!status.is_active"> Запустить скачивание</span>
+                <span x-show="status.is_active"> Идет процесс...</span>
+            </button>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Статусы и Мониторинг -->
+        <div class="status-panel">
+            <div class="status-row">
+                <span class="status-label">Старт (НСК):</span>
+                <span class="status-value" x-text="status.started_at_nsk || '—'">—</span>
+            </div>
+
+            <div class="status-row">
+                <span class="status-label">Статус:</span>
+                <span class="badge"
+                      :class="{
+                          'badge-active': status.is_active,
+                          'badge-success': status.status === 'completed',
+                          'badge-idle': status.status === 'idle',
+                          'badge-error': status.status === 'error'
+                      }"
+                      x-text="status.message || 'Ожидание'">
+                </span>
+            </div>
+
+            <!-- Прогресс бар -->
+            <div class="progress-block">
+                <div class="progress-info">
+                    <span class="status-label">Скачано файлов:</span>
+                    <span class="progress-counter">
+                        <span x-text="status.downloaded_count || 0">0</span> из <span x-text="status.total_names || 0">0</span>
+                    </span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" :style="`width: ${progressPercent}%`"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+function downloadApp() {
+    return {
+        status: {
+            is_active: false,
+            started_at_nsk: '',
+            total_names: 0,
+            downloaded_count: 0,
+            status: 'idle',
+            message: 'Ожидание'
+        },
+        pollInterval: null,
+
+        get progressPercent() {
+            if (!this.status.total_names) return 0;
+            return Math.min(100, Math.round((this.status.downloaded_count / this.status.total_names) * 100));
+        },
+
+        async startDownload() {
+            try {
+                const res = await fetch('/api/v1/download/start', { method: 'POST' });
+                if (res.ok) this.startPolling();
+            } catch (e) { console.error(e); }
+        },
+
+        async fetchStatus() {
+            try {
+                const res = await fetch('/api/v1/download/status');
+                if (res.ok) {
+                    this.status = await res.json();
+                    if (!this.status.is_active && this.pollInterval) {
+                        clearInterval(this.pollInterval);
+                        this.pollInterval = null;
+                    }
+                }
+            } catch (e) { console.error(e); }
+        },
+
+        startPolling() {
+            this.fetchStatus();
+            if (!this.pollInterval) this.pollInterval = setInterval(() => this.fetchStatus(), 1500);
+        },
+
+        init() { this.fetchStatus(); }
+    }
+}
+</script>
+{% endblock %}
