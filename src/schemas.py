@@ -1,6 +1,6 @@
 ﻿from datetime import datetime
 from typing import Literal
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, ConfigDict
 
 
 class FileNameResponse(BaseModel):
@@ -39,8 +39,7 @@ class DownloadStatusResponse(BaseModel):
             return self.errors_messages or "Произошла ошибка"
         return "Ожидание"
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class FileRead(BaseModel):
@@ -48,8 +47,7 @@ class FileRead(BaseModel):
     file_name: str
     downloaded_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PaginatedResponse(BaseModel):
@@ -62,15 +60,25 @@ class PaginatedResponse(BaseModel):
 
 class CalculateStatusRequest(BaseModel):
     file_ids: list[int] = []
-    selected_at: bool = False
+    select_all: bool = Field(default=False, validation_alias="selected_at")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class FileStatsItem(BaseModel):
-    filename: str
-    digit_counts: dict[str, int]
+    id: int
+    filename: str = Field(validation_alias="name")
+    digit_counts: dict[str, int] = Field(validation_alias="digits")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class CalculateStatusResponse(BaseModel):
-    total_files_analyzed: int
-    overall_stats: dict[str, int]
-    file_stats: list[FileStatsItem]
+    selected_count: int = Field(validation_alias="total_files_analyzed")
+    total_stats: dict[str, int] = Field(validation_alias="overall_stats")
+    files_stats: list[FileStatsItem] = Field(validation_alias="file_stats")
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        by_alias=False  
+    )

@@ -7,7 +7,7 @@ from src.config import settings
 from src.database import AsyncSessionLocal
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with AsyncSessionLocal as session:
+    async with AsyncSessionLocal() as session:
         yield session
 
 

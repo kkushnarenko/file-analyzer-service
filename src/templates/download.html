@@ -46,18 +46,6 @@
                 </span>
             </div>
 
-            <!-- Прогресс бар -->
-            <div class="progress-block">
-                <div class="progress-info">
-                    <span class="status-label">Скачано файлов:</span>
-                    <span class="progress-counter">
-                        <span x-text="status.downloaded_count || 0">0</span> из <span x-text="status.total_names || 0">0</span>
-                    </span>
-                </div>
-                <div class="progress-bar-bg">
-                    <div class="progress-bar-fill" :style="`width: ${progressPercent}%`"></div>
-                </div>
-            </div>
         </div>
 
     </div>

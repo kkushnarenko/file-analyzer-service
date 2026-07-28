@@ -7,16 +7,15 @@ from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.models import DownloadFile, DownloadProgress
-from src.schemas import DownloadStatusResponse
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRY_WAIT = 60
-
 REQUEST_DELAY = 0.5
 
 
@@ -28,21 +27,38 @@ class DownloadService:
         self.downloaded_files_count = 0
         self.error_message: str | None = None
 
-    def get_current_status(self):
-        return {
-            "status": self.status,
-            "start_time_nsk": self.start_time_nsk,
-            "total_names_count": self.received_names_count,
-            "downloaded_files_count": self.downloaded_files_count,
-            "error_message": self.error_message,
-        }
+    async def update_db_progress(self, db: AsyncSession, is_active: bool = True,
+                                  status_msg: str = "Скачивание выполняется..."):
+        stmt = select(DownloadProgress).order_by(DownloadProgress.id.desc())
+        result = await db.execute(stmt)
+        progress = result.scalars().first()
+
+        if not progress:
+            progress = DownloadProgress(
+                started_at_nsk=self.start_time_nsk or "-",
+                total_names_count=self.received_names_count,
+                downloaded_count=self.downloaded_files_count,
+                is_active=is_active,
+                status_message=status_msg
+            )
+            db.add(progress)
+        else:
+            progress.started_at_nsk = self.start_time_nsk or "-"
+            progress.total_names_count = self.received_names_count
+            progress.downloaded_count = self.downloaded_files_count
+            progress.is_active = is_active
+            progress.status_message = status_msg
+
+        await db.commit()
 
     async def run_download_pipeline(self, db: AsyncSession, client: httpx.AsyncClient):
         self.status = "running"
         self.error_message = None
 
         nsk_tz = zoneinfo.ZoneInfo("Asia/Novosibirsk")
-        self.start_time_nsk = datetime.now(nsk_tz).strftime("%d.%m.%Y %H:%M:%S")
+        self.start_time_nsk = datetime.now(nsk_tz).strftime("%H:%M:%S (%d.%m.%Y)")
+
+        await self.update_db_progress(db, is_active=True, status_msg="Скачивание выполняется...")
 
         while True:
             try:
@@ -56,6 +72,7 @@ class DownloadService:
                         logger.error(msg)
                         self.status = "error"
                         self.error_message = msg
+                        await self._update_db_progress(db, is_active=False, status_msg=msg)
                         break
 
                     logger.warning(f"Превышен лимит запросов. Ждем {retry_after} сек...")
@@ -69,9 +86,11 @@ class DownloadService:
 
                 if not file_names:
                     self.status = "completed"
+                    await self.update_db_progress(db, is_active=False, status_msg="Завершено")
                     break
 
                 self.received_names_count += len(file_names)
+                await self.update_db_progress(db, is_active=True, status_msg="Скачивание выполняется...")
 
                 batch_size = min(settings.MAX_FILES_PER_DOWNLOAD_BATCH, 3)
 
@@ -91,8 +110,9 @@ class DownloadService:
                         if retry_after > MAX_RETRY_WAIT:
                             msg = f"Сервер заблокировал скачивание на {retry_after} сек."
                             logger.error(msg)
-                            self.status = "error"  # Заменено "failed" -> "error" для валидации Pydantic
+                            self.status = "error"
                             self.error_message = msg
+                            await self._update_db_progress(db, is_active=False, status_msg=msg)
                             return
 
                         logger.warning(f"Превышен лимит скачивания. Ждем {retry_after} сек...")
@@ -105,6 +125,7 @@ class DownloadService:
 
                     dl_response.raise_for_status()
 
+                    files_to_insert = []
                     with zipfile.ZipFile(io.BytesIO(dl_response.content)) as zf:
                         for filename in zf.namelist():
                             file_content = zf.read(filename).decode("utf-8").strip()
@@ -112,15 +133,20 @@ class DownloadService:
                             file_path = settings.STORAGE_DIR / filename
                             file_path.write_text(file_content, encoding="utf-8")
 
-                            new_file = DownloadFile(
-                                name=filename,
-                                content=file_content,
-                                downloaded_at=datetime.now(timezone.utc)
-                            )
-                            db.add(new_file)
-                            self.downloaded_files_count += 1
+                            files_to_insert.append({
+                                "name": filename,
+                                "content": file_content,
+                                "downloaded_at": datetime.now(timezone.utc)
+                            })
 
-                    await db.commit()
+                    if files_to_insert:
+                        stmt = insert(DownloadFile).values(files_to_insert)
+                        stmt = stmt.on_conflict_do_nothing(index_elements=['name'])
+                        await db.execute(stmt)
+
+                    self.downloaded_files_count += len(files_to_insert)
+
+                    await self._update_db_progress(db, is_active=True, status_msg="Скачивание выполняется...")
 
                     await asyncio.sleep(REQUEST_DELAY)
 
@@ -129,7 +155,6 @@ class DownloadService:
                         json={"file_names": batch}
                     )
 
-                    # Проверяем 429 / 403 при отправке подтверждения
                     if mark_resp.status_code in (429, 403):
                         retry_after = int(mark_resp.headers.get("Retry-After", 5))
 
@@ -138,6 +163,7 @@ class DownloadService:
                             logger.error(msg)
                             self.status = "error"
                             self.error_message = msg
+                            await self._update_db_progress(db, is_active=False, status_msg=msg)
                             return
 
                         logger.warning(f"Превышен лимит при подтверждении. Ждем {retry_after} сек...")
@@ -153,6 +179,7 @@ class DownloadService:
             except Exception as e:
                 self.status = "error"
                 self.error_message = str(e)
+                await self.update_db_progress(db, is_active=False, status_msg=f"Ошибка: {str(e)}")
                 raise e
 
 
