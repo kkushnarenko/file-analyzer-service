@@ -81,16 +81,25 @@ function downloadApp() {
             return Math.min(100, Math.round((this.status.downloaded_count / this.status.total_names) * 100));
         },
 
-        async startDownload() {
-            try {
-                const res = await fetch('/api/v1/download/start', { method: 'POST' });
-                if (res.ok) this.startPolling();
-            } catch (e) { console.error(e); }
-        },
+      async startDownload() {
+          try {
+              this.status.is_active = true;
+              this.status.message = 'Запуск...';
 
+              const res = await fetch('/api/download/start', {method: 'POST'});
+              if (res.ok || res.status === 409) {
+                  this.startPolling();
+              } else {
+                  this.status.is_active = false;
+              }
+          } catch (e) {
+              console.error(e);
+              this.status.is_active = false;
+          }
+      },
         async fetchStatus() {
             try {
-                const res = await fetch('/api/v1/download/status');
+                const res = await fetch('/api/download/status');
                 if (res.ok) {
                     this.status = await res.json();
                     if (!this.status.is_active && this.pollInterval) {

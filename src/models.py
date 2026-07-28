@@ -8,9 +8,9 @@ class Base(DeclarativeBase):
 class DownloadFile(Base):
     __tablename__ = 'download_file'
     id : Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name : Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    name : Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
     content : Mapped[str] = mapped_column(Text)
-    downloaded_at : Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    downloaded_at : Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class DownloadProgress(Base):

@@ -36,7 +36,8 @@ src.db
 htmlcov/
 .nox/
 .tox/
-
 # === OS generated files ===
 .DS_Store
 Thumbs.db
+
+/src/storage

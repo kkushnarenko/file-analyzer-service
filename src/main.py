@@ -4,6 +4,7 @@ from src.api.routers import ui_router, api_router
 from src.database import init_db
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
+from src.api.downloader import router as downloader_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -18,3 +19,5 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 app.include_router(ui_router)
 app.include_router(api_router)
+
+app.include_router(downloader_router)
